@@ -2008,21 +2008,18 @@ of which surface they used.
 
 ## Versioning scheme
 
-The public API uses a **date-based versioning** scheme: `vYYYY-MM-DD` (e.g.
-`v2026-07-01`). This allows asynchronous, semantic releases without the
-overhead of a monotonically incrementing integer major version. Each date
-version is a stable snapshot of the API surface.
+The public API uses **Semantic Versioning** (`MAJOR.MINOR.PATCH`, e.g. `1.3.0`), defined in `lib/api/api-version.ts` via `API_VERSION` and kept in sync with `info.version` in `public/openapi.json`. Each version is a stable snapshot of the API surface.
 
-| Component      | Version identifier           | Where it lives                  |
-| -------------- | ---------------------------- | ------------------------------- |
-| HTTP API       | `v2026-07-01`                | `Accept` / `API-Version` header |
-| Soroban oracle | Contract address (immutable) | `.deployments/{network}.json`   |
-| MCP tools      | `@stellarintel/mcp` npm      | `package.json` version          |
-| TypeScript SDK | `@stellarintel/sdk` npm      | `package.json` version          |
-| OpenAPI spec   | `v1` (snapshot)              | `public/openapi.json`           |
+| Component      | Version identifier             | Where it lives                  |
+| -------------- | ------------------------------ | ------------------------------- |
+| HTTP API       | `1.3.0` (Semantic Versioning)  | `Accept` / `API-Version` header |
+| Soroban oracle | Contract address (immutable)   | `.deployments/{network}.json`   |
+| MCP tools      | Latest `main` (not yet on npm) | `package.json` version          |
+| TypeScript SDK | Latest `main` (not yet on npm) | `package.json` version          |
+| OpenAPI spec   | `1.3.0` (`info.version`)       | `public/openapi.json`           |
 
 The HTTP API and the Soroban oracle are versioned independently. The REST API
-may ship `v2026-10-01` while the oracle contract remains at its initial
+may ship a new semver release while the oracle contract remains at its initial
 deployment address.
 
 ---
@@ -2086,13 +2083,13 @@ Expedited removals are announced on all channels with the reason.
 
 ## Version support window
 
-| Surface                          | Supported versions       | Window                                            |
-| -------------------------------- | ------------------------ | ------------------------------------------------- |
-| HTTP REST API                    | Current only¹            | Current + 1 previous, 180 days (computed)         |
-| Soroban oracle contract          | Current deployed address | Until a migration is announced and executed       |
-| MCP tools                        | Latest npm release only  | Semver within `@stellarintel/mcp`                 |
-| TypeScript SDK                   | Latest npm release only  | Semver within `@stellarintel/sdk`                 |
-| Web UI (`app.stellar-intel.com`) | Latest only              | No version guarantee — always use the current URL |
+| Surface                             | Supported versions                       | Window                                            |
+| ----------------------------------- | ---------------------------------------- | ------------------------------------------------- |
+| HTTP REST API                       | Current only¹                            | Current + 1 previous, 180 days (computed)         |
+| Soroban oracle contract             | Current deployed address                 | Until a migration is announced and executed       |
+| MCP tools                           | Latest `main` (not yet published to npm) | Semver within repository                          |
+| TypeScript SDK                      | Latest `main` (not yet published to npm) | Semver within repository                          |
+| Web UI (`stellar-intel.vercel.app`) | Latest only                              | No version guarantee — always use the current URL |
 
 ¹ **The stated window is not yet what the code enforces**, in the sense that
 `SUPPORTED_API_VERSIONS` in `lib/api/api-version.ts` currently contains
@@ -2117,19 +2114,15 @@ version, which may change without notice.
 
 Deprecations and breaking changes are announced on:
 
-1. **GitHub releases** — every versioned API release is a GitHub Release with
-   a changelog entry. Subscribe at
-   `https://github.com/ezedike-evan/stellar-intel/releases`.
+1. **Status endpoint** — `GET /api/status` (`app/api/status/route.ts`) returns
+   `version`, `supported_versions`, and `announced_deprecations` as JSON fields.
 2. **CHANGELOG.md** — the `[Unreleased]` section lists pending deprecations;
    dated sections record shipped ones.
 3. **API response headers** — a deprecated-but-still-supported pin returns
    `Sunset` and `Warning: 299` on every response (see deprecation process
    above). No endpoint is deprecated today, so no live response carries
    either header yet.
-4. **Status page** — `GET /api/status` (`app/api/status/route.ts`) returns
-   `version`, `supported_versions`, and `announced_deprecations` as a JSON
-   array. The array is empty today for the same reason: nothing has been
-   deprecated yet.
+4. **GitHub repository** — releases and changelogs are tracked in `CHANGELOG.md` in the repository (GitHub Releases are not used yet).
 5. **Mailing list** — subscribe at
    `https://stellar-intel.vercel.app/updates` (planned).
 
@@ -2165,16 +2158,6 @@ comes from `lib/api/api-version.ts`, and a test asserts it matches
 Requests may pin a version with the same header. An unsupported value returns
 `400` with a `supportedVersions` list; omitting the header still means "latest",
 so pinning is opt-in and no existing client is broken by the check.
-
-**Known mismatch with the scheme above.** The _Versioning scheme_ section
-declares date-based versions (`vYYYY-MM-DD`), but nothing has ever emitted one.
-`API-Version` carries the semver spec version (`1.3.0`), kept in step with
-`info.version` in `public/openapi.json`, and that is what the negotiation
-accepts. Adopting date versions is a live decision, not an oversight in the
-implementation: it means changing `API_VERSION` in `lib/api/api-version.ts` and
-adding the old value to `SUPPORTED_API_VERSIONS` so pinned clients keep working
-across the switch. Documented here rather than resolved silently in either
-direction.
 
 ---
 
@@ -2280,7 +2263,7 @@ SECTION: INTEGRATION GUIDES
 
 # Cookbook
 
-**Last reviewed:** 2026-08-26
+**Last reviewed:** 2026-09-26
 
 End-to-end recipes against the live API. Base URL in examples:
 `https://stellar-intel.vercel.app` (swap for `http://localhost:3000` in dev).
@@ -2342,9 +2325,24 @@ Score formula: `fillRate × (1 − slippage) ÷ (settleSeconds / 300)` — see
 
 ## 4. Off-ramp via an AI agent (MCP)
 
-Run the MCP server and let an agent price/compare, then sign with the user's
-wallet to execute. See [`docs/MCP.md`](MCP.md) for the `npx tsx scripts/mcp/server.ts`
-run command and tool list. The agent cannot spend without a user signature.
+Use the hosted MCP endpoint (nothing to install):
+
+```json
+{
+  "mcpServers": {
+    "stellar-intel": {
+      "type": "http",
+      "url": "https://stellar-intel.vercel.app/api/mcp"
+    }
+  }
+}
+```
+
+The endpoint serves `intel.offramp.quote`, `intel.offramp.prepare`, `intel.execute`,
+and `intel.leaderboard`. For the full tool set including `intel.corridors`,
+`intel.anchor.reputation`, `intel.anchor.health`, and `intel.probe.coverage`,
+run the server locally — see [`docs/MCP.md`](MCP.md) for the `npx tsx scripts/mcp/server.ts`
+run command. The agent cannot spend without a user signature.
 
 ## 5. Consume the reputation oracle on-chain
 
@@ -2381,14 +2379,21 @@ Classifies directory anchors by SEP support — see
 
 # SDK
 
-> **Status: roadmap (v4).** A first-class typed client `@stellarintel/sdk` is a
-> v4 "Universal" deliverable (see [`docs/ROADMAP.md`](ROADMAP.md)). It is **not yet
-> published to npm** — the npm badge in the README is aspirational. Until it ships,
-> use the HTTP API directly (below). The MCP package
-> ([`packages/mcp/`](../packages/mcp/), `@stellarintel/mcp`) is the agent-facing
-> surface that exists today.
+> **Status: built in-tree, not yet published.** All four SDKs exist in this
+> repository; none is on a public registry yet (the registry scopes are
+> unclaimed — see each package's README for the publishing steps):
+>
+> | Package                    | Language   | Path                                                                      |
+> | -------------------------- | ---------- | ------------------------------------------------------------------------- |
+> | `@stellarintel/sdk`        | TypeScript | [`packages/sdk/`](../packages/sdk/)                                       |
+> | `stellarintel`             | Python     | [`packages/python-sdk/`](../packages/python-sdk/)                         |
+> | `stellar-intel-client`     | Rust       | [`crates/stellar-intel-client/`](../crates/stellar-intel-client/)         |
+> | `stellar-intel-reputation` | Rust       | [`crates/stellar-intel-reputation/`](../crates/stellar-intel-reputation/) |
+>
+> The MCP package ([`packages/mcp/`](../packages/mcp/), `@stellarintel/mcp`) is
+> the agent-facing surface alongside them.
 
-**Last reviewed:** 2026-08-26
+**Last reviewed:** 2026-09-25
 
 ## `stellar-intel-reputation` (Rust, on-chain)
 
@@ -2407,7 +2412,7 @@ until the maintainer wires up a `CARGO_REGISTRY_TOKEN`, depend on it directly:
 ```toml
 [dependencies]
 stellar-intel-reputation = { git = "https://github.com/ezedike-evan/stellar-intel", package = "stellar-intel-reputation" }
-# once published: stellar-intel-reputation = "0.2"
+# once published: stellar-intel-reputation = "0.3"
 ```
 
 ```rust,ignore
@@ -2482,29 +2487,39 @@ Types you can import from the repo today: `OfframpIntent`, `SignedIntentEnvelope
 `IntentV1` ([`types/intent.ts`](../types/intent.ts)) and the reputation types
 ([`types/reputation.ts`](../types/reputation.ts)).
 
-## Future: published `@stellarintel/sdk` package (v4)
+## Using `@stellarintel/sdk` from the repo
 
-The npm package is planned and is not available yet. Once published, its
-installation will be:
+The TypeScript client is built at [`packages/sdk/`](../packages/sdk/)
+(`0.1.0`) — typed wrappers for the rates, intent, and reputation APIs with
+retries and idempotency keys on by default. It is not on npm yet (the
+`@stellarintel` scope is unclaimed; `packages/sdk/README.md` documents the two
+human publishing steps, after which a `sdk-v*` tag triggers
+`.github/workflows/publish-npm-sdk.yml`). Until then, consume it from the
+repository:
 
 ```bash
-npm install @stellarintel/sdk
+git clone https://github.com/ezedike-evan/stellar-intel
+cd stellar-intel/packages/sdk && npm install && npm run build
+# then, from your project:
+npm install /path/to/stellar-intel/packages/sdk
 ```
 
-- Typed wrappers for the rates, intent, and reputation APIs.
-- React hooks (the app's `hooks/useAnchorRates.ts` is the reference pattern).
-- A signing helper that builds → canonicalizes → hashes → signs an intent via a
-  wallet adapter.
-- Three reference integrations (web, agent, wallet).
+```ts
+import { StellarIntelClient } from '@stellarintel/sdk';
 
-When it ships, this document becomes the SDK reference; the HTTP recipes above
+const client = new StellarIntelClient();
+const { rates, bestRateId } = await client.getRates('usdc-ngn');
+```
+
+See [`packages/sdk/README.md`](../packages/sdk/README.md) for the full method
+list, error handling, and the hardening contract. The HTTP recipes above
 remain valid as the underlying transport.
 
 <!-- source: docs/MCP.md -->
 
 # Stellar Intel — MCP Server
 
-**Last reviewed:** 2026-09-01
+**Last reviewed:** 2026-09-26
 
 The MCP server exposes Stellar Intel's off-ramp routing and anchor
 intelligence to MCP-capable agents over stdio or streamable HTTP. It lives in
@@ -2524,6 +2539,7 @@ The two entry points do not expose the same tool set:
 | `intel.anchor.health`     | —                   | ✓              | —                             |
 | `intel.probe.coverage`    | —                   | ✓              | —                             |
 | `intel.leaderboard`       | ✓                   | ✓              | ✓                             |
+| `intel.corridors`         | —                   | ✓              | —                             |
 
 **Scope:** Stellar Intel abstracts anchors, not chains. These tools answer
 "what's my best fiat exit price, and which Stellar anchor should I trust to
@@ -2566,7 +2582,7 @@ minute per IP.
 
 **It serves the four-tool set**, matching the `scripts/mcp` column in the table
 above — `intel.offramp.quote`, `intel.offramp.prepare`, `intel.execute` and
-`intel.leaderboard`. The four `packages/mcp`-only tools are not on the hosted
+`intel.leaderboard`. The five `packages/mcp`-only tools are not on the hosted
 endpoint yet: that package's modules use explicit `./tool.js` specifiers which
 the app's bundler does not resolve back to their `.ts` sources, and
 `npm run build --workspace=@stellarintel/mcp` currently fails on pre-existing
@@ -2822,6 +2838,39 @@ app instance at `NEXT_PUBLIC_APP_URL`.
   omitting it ranks every registered anchor globally
 - **Output:** the leaderboard rows, each with its score, sample size,
   `measured` flag and standing label
+
+### `intel.corridors` (packages/mcp only)
+
+Enumerates every corridor Stellar Intel currently surfaces, with its id, display
+name, source asset, destination fiat currency, country, and the anchors that
+serve it. Call this before any tool that takes a corridor id rather than
+guessing one. Flag-gated corridors that the UI hides are omitted.
+
+- **Input:** `{}`
+- **Output:** `{ count: number, corridors: CorridorSummary[] }` where each
+  `CorridorSummary` carries `id`, `displayName`, `from`, `to`, `countryCode`,
+  `countryName`, and `anchors[]` (each with `id`, `name`, `homeDomain`).
+
+```jsonc
+// output (abridged)
+{
+  "count": 6,
+  "corridors": [
+    {
+      "id": "usdc-ngn",
+      "displayName": "Nigeria (NGN)",
+      "from": "USDC",
+      "to": "NGN",
+      "countryCode": "NG",
+      "countryName": "Nigeria",
+      "anchors": [
+        { "id": "cowrie", "name": "Cowrie Exchange", "homeDomain": "cowrie.exchange" },
+        { "id": "ngnc", "name": "NGNC", "homeDomain": "ngnc.online" },
+      ],
+    },
+  ],
+}
+```
 
 ## Prompts
 
@@ -3129,7 +3178,7 @@ method that does not match the running code is worse than no published method.
    `weightedComposite()` instead — a clamped `0.4 × fill + 0.3 × (1 −
 slippage/0.05) + 0.3 × (1 − settle/300)` bounded to `[0, 1]`. The two produce
    different orderings. `lib/reputation/composite.ts` acknowledges the split in
-   its own comments; picking one is tracked in #917.
+   its own comments; the choice is still open (the follow-up to #917).
 2. **`state` flips at one outcome, not thirty.** `MIN_SAMPLES = 1` in
    `lib/reputation/aggregate.ts` is what moves a scorecard from
    `insufficient_data` to `ok`. `MIN_OUTCOMES_THRESHOLD = 30` is a _display_
@@ -3155,16 +3204,19 @@ are in `lib/reputation/migrations/`.
 
 ## API
 
-| Method & path                                   | Purpose                                                                                                                        |
-| ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| `GET /api/reputation/leaderboard?corridor=…`    | Ranked anchors (optionally per-corridor).                                                                                      |
-| `GET /api/reputation/[anchor]`                  | Current score + bands for one anchor.                                                                                          |
-| `GET /api/reputation/[anchor]/history?window=…` | Historical score series.                                                                                                       |
-| `POST /api/reputation/append`                   | Append a signed outcome tuple.                                                                                                 |
-| `POST /api/reputation/dispute`                  | File a dispute against an outcome.                                                                                             |
-| `POST /api/reputation/reconcile`                | Reconcile aggregates (maintenance).                                                                                            |
-| `POST /api/reputation/refresh`                  | Refresh materialized aggregates.                                                                                               |
-| `GET /api/reputation/sdf-export`                | Candidate export for SDF's Anchor Directory — see [`docs/ANCHOR_DIRECTORY_CONTRIBUTION.md`](ANCHOR_DIRECTORY_CONTRIBUTION.md). |
+| Method & path                                        | Purpose                                                                                                                        |
+| ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `GET /api/reputation/actuarial`                      | settlement-SLA actuarial accumulation (#813).                                                                                  |
+| `GET /api/reputation/leaderboard?corridor=…`         | Ranked anchors (optionally per-corridor).                                                                                      |
+| `GET /api/reputation/probe-coverage`                 | 90-day probe-accumulation progress JSON.                                                                                       |
+| `GET /api/reputation/[anchor]`                       | Current score + bands for one anchor.                                                                                          |
+| `GET /api/reputation/[anchor]/history?window=…`      | Historical score series.                                                                                                       |
+| `POST /api/reputation/append`                        | Append a signed outcome tuple.                                                                                                 |
+| `POST /api/reputation/dispute`                       | File a dispute against an outcome.                                                                                             |
+| `GET\|POST /api/reputation/reconcile`                | Reconcile aggregates (maintenance).                                                                                            |
+| `GET\|POST /api/reputation/reconcile-volume-savings` | Reconciles DB volume and savings against on-chain stats.                                                                       |
+| `GET\|POST /api/reputation/refresh`                  | Refresh materialized aggregates.                                                                                               |
+| `GET /api/reputation/sdf-export`                     | Candidate export for SDF's Anchor Directory — see [`docs/ANCHOR_DIRECTORY_CONTRIBUTION.md`](ANCHOR_DIRECTORY_CONTRIBUTION.md). |
 
 Outcomes are signed and replayable, so a dispute resolves on evidence, not
 opinion. Admin-only review is gated by `ADMIN_SECRET_KEY` via
@@ -3215,7 +3267,7 @@ separate table and are unaffected.
 The same outcomes are written to the Soroban reputation contract for permissionless
 reads. The contract interface (`submit_outcome`, anchor registry, admin) is
 specified in [`docs/ORACLE_SPEC.md`](ORACLE_SPEC.md). Mainnet deployment is a
-roadmap gate (see [`docs/ROADMAP.md`](ROADMAP.md), Wave 2.1).
+roadmap gate (see [`docs/MAINNET_LAUNCH.md`](MAINNET_LAUNCH.md), the 90-day probe window and the audit).
 
 ## Disputes
 
@@ -3409,11 +3461,10 @@ on-chain so any consumer can read an anchor's track record without Stellar Intel
 permission.
 
 Source of truth: [`contracts/reputation/`](../contracts/reputation/)
-(`Cargo.toml`, `src/lib.rs`, `src/admin.rs`, `src/anchors.rs`, `src/outcome.rs`,
-`tests/basic.rs`).
+(`Cargo.toml`, 14 source files in `src/`, and 14 test files in `tests/`).
 
 > **Status.** The contract is implemented and unit-tested
-> (`contracts/reputation/tests/basic.rs`) and deployed to testnet at
+> (`contracts/reputation/tests/`) and deployed to testnet at
 > `CCZ54NTEOVL2DKWCGJA5XHTHOGRDS7JHFKYWEC6QH2IMZLYNM3FBFKDG` (see
 > `.deployments/testnet.json`), with `submitToOracle`
 > (`packages/publisher/src/batch.ts`) wired against it. Mainnet deployment,
@@ -3428,29 +3479,39 @@ Source of truth: [`contracts/reputation/`](../contracts/reputation/)
 ### Outcomes — `src/outcome.rs`, `src/lib.rs`
 
 ```rust
-pub fn submit_outcome(/* … outcome fields … */) -> Result<(), Error>
+pub fn submit_outcome(
+    env: Env,
+    publisher: Address,
+    anchor_id: String,
+    corridor: String,
+    outcome_hash: String,
+    settle_seconds: u64,
+    success: bool,
+) -> Result<(), Error>
 ```
 
 Records a single anchor outcome (the on-chain mirror of an off-chain outcome
 tuple — fill, slippage, settle latency). Writes are restricted to authorized
 publishers via the admin gate.
 
-### Anchor registry — `src/anchors.rs`
+### Anchor registry — `src/anchors.rs`, `src/lib.rs`
 
 ```rust
-pub fn list(env: &Env) -> Vec<String>            // registered anchor ids
-pub fn register(env: &Env, anchor_id: String) -> Result<(), Error>
+pub fn list_anchors(env: Env) -> Vec<String>
+pub fn register_anchor(env: Env, caller: Address, anchor_id: String) -> Result<(), Error>
 ```
 
-### Admin — `src/admin.rs`
+### Admin — `src/admin.rs`, `src/lib.rs`
 
 ```rust
-pub fn set_admin(env: &Env, admin: &Address) -> Result<(), Error>
-pub fn get_admin(env: &Env) -> Option<Address>
-pub fn require_admin(env: &Env, caller: &Address) -> Result<(), Error>  // internal gate
+pub fn admin(env: Env) -> Option<Address>
+pub fn propose_admin(env: Env, caller: Address, candidate: Address) -> Result<(), Error>
+pub fn accept_admin(env: Env, candidate: Address) -> Result<(), Error>
+pub fn cancel_admin_proposal(env: Env, caller: Address) -> Result<(), Error>
+pub fn pending_admin(env: Env) -> Option<Address>
 ```
 
-`require_admin` is the authorization check that guards `register`.
+`require_admin` is the internal authorization check in `src/admin.rs` that guards `register_anchor`, publisher management, and migrations.
 
 ### Custody
 
@@ -3479,7 +3540,7 @@ It prints the admin, the upgrade admin, the pending admin and the contract
 version, and warns when the two authorities are the same account — one
 compromised key that can both forge data and replace the code.
 
-> **Current testnet state (checked 2026-08-28, tracked in #1149).**
+> **Current testnet state (checked 2026-08-28, #1149, closed; redeploy pending).**
 > `contract_version` is `0` and the upgrade admin is unset: the deployed
 > bytecode is seven weeks old and predates both the constructor-based
 > `__constructor(admin, upgrade_admin)` binding (see "Fresh deploy" below) and
@@ -3495,12 +3556,13 @@ Every state-changing entrypoint is gated. There are two gates, and which one
 applies depends on whether the write is an operational data feed or a
 governance action.
 
-| Gate                                                         | Entrypoints                                                                                                                               |
-| ------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| **Publisher** (`publishers::is_authorized` + `require_auth`) | `submit_outcome`, `set_corridor_metrics`, `publish_corridor_rate`, `add_volume_savings`                                                   |
-| **Admin** (`admin::require_admin`)                           | `register_anchor`, `add_publisher`, `revoke_publisher`, `propose_admin`, `cancel_admin_proposal`, `migrate_corridor_v2`, `migrate_all_v2` |
-| **Candidate self-auth**                                      | `accept_admin`                                                                                                                            |
-| **Upgrade admin**                                            | `upgrade`                                                                                                                                 |
+| Gate                                                         | Entrypoints                                                                                                                                                                                   |
+| ------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Publisher** (`publishers::is_authorized` + `require_auth`) | `submit_outcome`, `set_corridor_metrics`, `publish_corridor_rate`, `add_volume_savings`                                                                                                       |
+| **Admin** (`admin::require_admin`)                           | `register_anchor`, `add_publisher`, `revoke_publisher`, `reset_corridor_aggregate`, `reset_volume_savings`, `propose_admin`, `cancel_admin_proposal`, `migrate_corridor_v2`, `migrate_all_v2` |
+| **Candidate self-auth**                                      | `accept_admin`                                                                                                                                                                                |
+| **Upgrade admin**                                            | `upgrade`, `propose_upgrade_admin`, `cancel_upgrade_proposal`                                                                                                                                 |
+| **Upgrade candidate self-auth**                              | `accept_upgrade_admin`                                                                                                                                                                        |
 
 `set_corridor_metrics`, `migrate_corridor_v2` and `migrate_all_v2` were
 **unguarded** until #907 — they took no caller at all, so any account could
@@ -3511,14 +3573,16 @@ a breaking ABI change: all three now take a leading caller `Address` and return
 ## Consuming the oracle
 
 Off-chain, read the same data through [`/api/reputation/*`](ANCHOR_REPUTATION.md).
-On-chain, a consumer contract calls the read entrypoints directly. A TypeScript
-read helper and JS/Python example consumers are roadmap deliverables (Wave 2.1).
+On-chain, a consumer contract calls the read entrypoints directly. Existing
+consumers and helpers include the TypeScript read helper (`lib/oracle/read.ts`),
+a JavaScript example consumer (`examples/consumer-contract/read-oracle.mjs`),
+and the Python SDK (`packages/python-sdk`).
 
 ## Building & testing
 
 ```bash
 cd contracts/reputation
-cargo test                                          # runs tests/basic.rs
+cargo test                                          # runs all 14 files in tests/
 ```
 
 Deploying is its own section below — `scripts/deploy-oracle-testnet.ts` needs
@@ -3610,7 +3674,7 @@ non-empty.
 > Source of truth: [`contracts/reputation/src/volume_savings.rs`](../contracts/reputation/src/volume_savings.rs)
 > (`VolumeSavings` struct, `add_volume_savings` / `get_volume_savings` entrypoints).
 
-**Last reviewed:** 2026-08-26
+**Last reviewed:** 2026-09-24
 
 ---
 
@@ -3618,40 +3682,32 @@ non-empty.
 
 ### "Fees saved" definition
 
-For each executed intent, the **savings** is the difference between the
-baseline cost and the actual cost, expressed in USDC:
+For each executed intent with `outcome === 'completed'`, the **savings** is the difference between the baseline cost in USDC and the actual quoted cost in USDC, clamped at zero (returning 0 if the outcome is not completed or if required amounts are missing):
 
 ```
-savings = baseline_received - actual_received
+baseline_cost = delivered_amount / baseline_rate
+savings = max(0, baseline_cost - quoted_amount)
 ```
 
 Where:
 
-- **`actual_received`** — the fiat amount the user actually received after
-  all anchor fees, derived from the delivered rate in the settled outcome.
-- **`baseline_received`** — the fiat amount the user would have received
-  using a reference baseline rate.
+- **`quoted_amount`** — the actual USDC input amount for the route.
+- **`delivered_amount`** — the fiat amount delivered to the recipient.
+- **`baseline_rate`** — the reference exchange rate (fiat per 1 USDC).
+- **`baseline_cost`** — the USDC amount that would have been required to deliver `delivered_amount` at the `baseline_rate`.
 
 ### Baseline selection
 
-The baseline is determined using the following priority order:
+The baseline rate is determined using the following priority order:
 
-1. **Anchor's own indicative rate** at intent time (from SEP-24 `/fee` or
-   SEP-38 `QUOTE` response). This captures what the user would have gotten
-   if they went directly to that same anchor without Stellar Intel routing.
-2. **Corridor median rate** — the median of all available anchor rates for
-   the corridor at the time of execution, used when the anchor-specific
-   baseline is unavailable (e.g. the anchor only provides a firm quote
-   post-routing).
-3. **Previous published corridor rate** — the last on-chain corridor rate
-   published by `publish_corridor_rate`, used as fallback when neither
-   anchor-specific nor corridor-median data exists.
+1. **Anchor's own indicative rate** at intent time (`quoted_rate` from SEP-24 `/fee` or SEP-38 `QUOTE` response). This captures what the user would have gotten if they went directly to that same anchor without Stellar Intel routing.
+2. **Corridor median rate** — the median of recent delivered rates for the corridor from attested outcomes, used when the anchor-specific indicative rate is unavailable or non-positive.
+
+_(Note: Fallback to previously published on-chain corridor rates is not implemented; if neither indicative rate nor corridor median is available or positive, savings defaults to 0)._
 
 ### Volume tracking
 
-Cumulative volume is the sum of all `actual_received` values (in USDC
-equivalent) for the corridor. This is the total value that flowed through
-Stellar Intel's routing for that corridor.
+Cumulative volume is the sum of all `quoted_amount` values converted to microUSDC (`quoted_amount × 1_000_000`) for completed outcomes in the corridor. This is the total USDC value that flowed through Stellar Intel's routing for that corridor.
 
 ### On-chain publishing
 
@@ -3659,9 +3715,9 @@ Volume and savings are published by the same publisher service that submits
 outcomes (see `packages/publisher/src/batch.ts`). Each settlement triggers:
 
 1. Outcome submission to the reputation oracle (`submit_outcome`).
-2. Volume + savings increment via `add_volume_savings`.
+2. Volume + savings increment via `add_volume_savings` (for completed outcomes).
 
-Both values are **cumulative and monotonically increasing**. A consumer can
+Both values are **cumulative; only decreases when an admin calls `reset_volume_savings`**. A consumer can
 read the latest snapshot and compare it against a previously recorded value
 to compute the delta over any interval.
 
@@ -3700,38 +3756,38 @@ derived from on-chain evidence that any third party can audit.
 
 # SEP Compliance Matrix
 
-**Last reviewed:** 2026-08-26
+**Last reviewed:** 2026-09-26
 
 Stellar Intel integrates with Stellar anchors that implement various Stellar Ecosystem Proposals (SEPs). SEP-6 enables programmatic deposit/withdraw — the anchor exposes a machine-readable API rather than hosting an iframe — allowing Stellar Intel to collect KYC fields natively and surface indicative rates for SEP-6-only anchors. Anchors that advertise SEP-6 but not SEP-24 receive an **Indicative** badge in the comparison UI, since their rates are derived from the SEP-6 `/info` fee schedule rather than a live quote.
 
 ## What Stellar Intel implements
 
-| SEP        | What it is                                  | Status                      | Code                                              |
-| ---------- | ------------------------------------------- | --------------------------- | ------------------------------------------------- |
-| **SEP-1**  | `stellar.toml` resolution                   | ✅ implemented              | [`lib/stellar/sep1.ts`](../lib/stellar/sep1.ts)   |
-| **SEP-6**  | Programmatic deposit/withdraw               | 🛠️ in progress              | `lib/stellar/sep6.ts` (planned)                   |
-| **SEP-10** | Web authentication (challenge → sign → JWT) | ✅ implemented              | [`lib/stellar/sep10.ts`](../lib/stellar/sep10.ts) |
-| **SEP-12** | KYC customer API                            | 🛠️ in progress (with SEP-6) | `lib/stellar/sep12.ts` (planned)                  |
-| **SEP-24** | Interactive hosted deposit/withdraw         | ✅ implemented              | [`lib/stellar/sep24.ts`](../lib/stellar/sep24.ts) |
-| **SEP-31** | Cross-border payments (B2B)                 | ⚪ detection only           | capability flag, no flow                          |
-| **SEP-38** | Firm-quote RFQ                              | ✅ implemented              | [`lib/stellar/sep38.ts`](../lib/stellar/sep38.ts) |
+| SEP        | What it is                                  | Status            | Code                                              |
+| ---------- | ------------------------------------------- | ----------------- | ------------------------------------------------- |
+| **SEP-1**  | `stellar.toml` resolution                   | ✅ implemented    | [`lib/stellar/sep1.ts`](../lib/stellar/sep1.ts)   |
+| **SEP-6**  | Programmatic deposit/withdraw               | ✅ implemented    | [`lib/stellar/sep6.ts`](../lib/stellar/sep6.ts)   |
+| **SEP-10** | Web authentication (challenge → sign → JWT) | ✅ implemented    | [`lib/stellar/sep10.ts`](../lib/stellar/sep10.ts) |
+| **SEP-12** | KYC customer API                            | ✅ implemented    | [`lib/stellar/sep12.ts`](../lib/stellar/sep12.ts) |
+| **SEP-24** | Interactive hosted deposit/withdraw         | ✅ implemented    | [`lib/stellar/sep24.ts`](../lib/stellar/sep24.ts) |
+| **SEP-31** | Cross-border payments (B2B)                 | ⚪ detection only | capability flag, no flow                          |
+| **SEP-38** | Firm-quote RFQ                              | ✅ implemented    | [`lib/stellar/sep38.ts`](../lib/stellar/sep38.ts) |
 
 Rate sourcing tiers (in [`lib/stellar/server-rates.ts`](../lib/stellar/server-rates.ts)):
 
 1. **SEP-38** firm quote (preferred).
 2. **SEP-24** indicative — live FX × the anchor's published SEP-24 withdraw fee.
-3. **SEP-6** indicative — live FX × the anchor's SEP-6 `/info` fee (in progress; this is what makes SEP-6-only anchors like Cowrie appear in the comparison).
+3. **SEP-6** indicative — live FX × the anchor's SEP-6 `/info` fee (this is what makes SEP-6-only anchors like Cowrie appear in the comparison).
 
 ## Why SEP-6 matters here
 
-The off-ramp execution flow was historically SEP-24-only (anchor-hosted KYC in an iframe). SEP-6-only anchors advertise `TRANSFER_SERVER` but no `TRANSFER_SERVER_SEP0024`, so they were silently dropped from the comparison and could not be executed. SEP-6 support is being added in two phases:
+The off-ramp execution flow was historically SEP-24-only (anchor-hosted KYC in an iframe). SEP-6-only anchors advertise `TRANSFER_SERVER` but no `TRANSFER_SERVER_SEP0024`, so they were silently dropped from the comparison and could not be executed. SEP-6 support was added in two phases:
 
 - **Phase 1 — quotes.** Parse SEP-6 `/info` fees and surface an indicative rate so SEP-6 anchors appear in the comparison (Tier 3 above).
 - **Phase 2 — execution.** Programmatic withdraw: SEP-6 `/withdraw` + SEP-12 (`/customer`) KYC collected via a dynamic in-app form (replacing the hosted iframe for SEP-6 anchors), with status polling through the unified status map.
 
 The difference: **SEP-24** = the anchor hosts the KYC/checkout page (we embed a URL); **SEP-6** = we collect every field ourselves and submit programmatically (we build the form, do SEP-12 KYC). They are not mutually exclusive — many anchors support both.
 
-Tracking: batch-2 issues `#B001–#B025` (see [`issues-batch-2.md`](../issues-batch-2.md)).
+Tracking: batch-2 issues `#B001–#B025` (see [CONTRIBUTING.md](../CONTRIBUTING.md#issue-numbering)).
 
 ## Per-anchor SEP support matrix
 
@@ -3770,11 +3826,11 @@ independently, so that is flagged in `constants/anchors.ts` rather than resolved
 
 ## Notes
 
-- **Cowrie Exchange** (`cowrie.exchange`) implements SEP-6 programmatic withdraw for the NGN corridor. It does not advertise `TRANSFER_SERVER_SEP0024`, so it appears in the rate comparison as an **Indicative** source only (Tier 3). Full programmatic execution via SEP-6 + SEP-12 is tracked in batch-2.
+- **Cowrie Exchange** (`cowrie.exchange`) implements SEP-6 programmatic withdraw for the NGN corridor. It does not advertise `TRANSFER_SERVER_SEP0024`, so it appears in the rate comparison as an **Indicative** source only (Tier 3).
 - **Anclap** supports both SEP-6 and SEP-24. Where both are present, Stellar Intel prefers the SEP-24 hosted flow for execution and falls back to SEP-6 indicative pricing when no firm quote is available.
 - **nTokens** (`ntokens.com`) services the BRL corridor via `ntokens-box.bpventures.us`. Its TOML advertises `TRANSFER_SERVER_SEP0024`, a `DIRECT_PAYMENT_SERVER` (SEP-31), and `TRANSFER_SERVER` (SEP-6). SEP-38 and SEP-12 are not advertised.
 - **MoneyGram** serves the widest corridor set (five currencies) exclusively through SEP-24. It does not publish a SEP-6 transfer server or an anchor quote server.
-- SEP-12 columns will flip to ✅ once the in-app KYC form (tracked in batch-2) is wired to each anchor's `/customer` endpoint.
+- SEP-12 columns in the matrix above reflect the anchor's advertised capability in `stellar.toml`. The in-app KYC form wires to each anchor's `/customer` endpoint at execution time.
 
 ## Fleet survey
 
@@ -3974,11 +4030,12 @@ re-exported verbatim by `lib/stellar/anchors.ts`. The entry is an `Anchor`
 | `metadata`      |                | Operator regions / KYC model / fee model. Defined on the type, but not written inline today — see the flat-entry constraint below.                         |
 
 > **`seps` is not optional in practice.** `transferCapable()` is
-> `anchor.seps?.some(sep => TRANSFER_SEPS.includes(sep)) ?? false`. An entry with
+> `anchor.seps?.some(sep => ROUTABLE_SEPS.includes(sep)) ?? false`. An entry with
 > no `seps` — or with only `sep10` / `sep38` — is silently excluded from
 > `getAnchorsByCorridorId`, so the anchor never reaches a corridor selector or
-> the rate engine, and nothing errors. Declare at least one of `sep6`, `sep24`,
-> `sep31`.
+> the rate engine, and nothing errors. Declare at least one of `sep6` or `sep24` for
+> routed off-ramp anchors; SEP-31-only anchors are tracked for health but never routed,
+> and must use `corridors: []` plus `sep31Corridors`.
 
 > **Keep the entry flat.** `scripts/validate-anchors.mjs` and
 > `scripts/check-registry.mjs` isolate anchor objects with a brace-free
@@ -4308,15 +4365,14 @@ for users — losing funds — is structurally out of scope because we never hol
   ([`docs/INTENT_API.md`](INTENT_API.md)).
 - **`ADMIN_SECRET_KEY`** gates `/admin/disputes` and admin reputation routes. Keep
   it server-side only; never expose it to the client (it is **not** a
-  `NEXT_PUBLIC_*` var). See `lib/config.ts` for env validation.
+  `NEXT_PUBLIC_*` var). See `lib/auth/admin.ts`.
 - **Publisher keys** (Soroban oracle) are server-held and never shipped to the
   browser. Rotation policy is a roadmap item ([`docs/ROADMAP.md`](ROADMAP.md)).
-- **Contract admin key** — the reputation contract's admin `Address` is
-  currently a single HSM-backed key. The migration path to a community-governed
-  multisig (M-of-N Stellar account) is documented in
-  [`docs/GOVERNANCE.md`](GOVERNANCE.md). The two-step `propose_admin` /
-  `accept_admin` entrypoints on the contract are in place to execute that
-  handoff safely once the signer set is ratified.
+- **Contract admin key** — on testnet the admin is a single key shared with the
+  publisher account; mainnet requires a separate multisig admin
+  ([`docs/MAINNET_LAUNCH.md`](MAINNET_LAUNCH.md), [`docs/GOVERNANCE.md`](GOVERNANCE.md)).
+  The two-step `propose_admin` / `accept_admin` entrypoints on the contract are in
+  place to execute that handoff safely once the signer set is ratified.
 
 ## Network & data integrity
 
@@ -4365,8 +4421,8 @@ the system is [non-custodial](NON_CUSTODY.md) and never holds either.
 | **Hostile SEP-10 challenge**     | Anchor serves a payment or other transaction as the login challenge | Before signing, `validateSep10Challenge` requires: sequence 0, source and signature from the toml `SIGNING_KEY`, `manage_data`-only ops with the first for this wallet and anchor domain, finite current timebounds. Missing `SIGNING_KEY` fails closed. Cosmetic deviations (text memo, `web_auth_domain` value) are tolerated. |
 | **Intent replay**                | Re-submitting a previously-signed envelope                          | `lib/intent/replay.ts` treats each signed envelope as single-use; server recomputes the canonical hash and verifies the signature.                                                                                                                                                                                               |
 | **Intent tampering**             | Altering amount/anchor after signing                                | Server recomputes SHA-256 over the canonical intent and verifies the Ed25519 signature; `publicKey` must match. Any change invalidates the signature.                                                                                                                                                                            |
-| **Reputation poisoning**         | Forged or spam outcomes to skew scores                              | Append needs the sender's signature over the intent hash, is insert-only and registry-checked; scores and the publisher read attested rows only. On-chain writes gated by `require_admin`.                                                                                                                                       |
-| **Oracle tampering**             | Unauthorized contract writes                                        | Soroban `require_admin` gate on `submit_outcome` / `register`; multi-signer admin + time-locked upgrade are roadmap hardening.                                                                                                                                                                                                   |
+| **Reputation poisoning**         | Forged or spam outcomes to skew scores                              | Append needs the sender's signature over the intent hash, is insert-only and registry-checked; scores and the publisher read attested rows only. On-chain writes gated by publisher authorization.                                                                                                                               |
+| **Oracle tampering**             | Unauthorized contract writes                                        | Publisher gate (`publishers::is_authorized` + `require_auth`) on `submit_outcome`; admin gate on `register_anchor`; multi-signer admin + time-locked upgrade are roadmap hardening.                                                                                                                                              |
 | **Admin-route abuse**            | Hitting `/admin/disputes` or admin reputation routes                | Gated by server-only `ADMIN_SECRET_KEY` (not a `NEXT_PUBLIC_*` var).                                                                                                                                                                                                                                                             |
 | **Agent misuse**                 | An AI agent tries to drain a wallet via MCP                         | MCP surface is advisory + user-signed: every executing call must be signed by the user's wallet. No held keys, no autonomous spend.                                                                                                                                                                                              |
 | **Griefing / DoS on rates**      | Hammering `/api/rates` or anchors                                   | Per-anchor timeouts + isolation (`server-rates.ts`); API rate limiting (`lib/api/rate-limit.ts`).                                                                                                                                                                                                                                |
@@ -4403,8 +4459,8 @@ facts, all enforced in code:
 
 1. **Every leg is signed by the user.** Value moves only on a transaction the user
    signs in their own wallet (Freighter). We submit nothing on a user's behalf with
-   a held key. Intents are user-signed envelopes
-   ([`docs/INTENT_API.md`](INTENT_API.md)).
+   a held key. Intents may carry a user signature (optional attestation); value moves
+   only on a transaction the user signs in their wallet ([`docs/INTENT_API.md`](INTENT_API.md)).
 2. **The anchor takes custody.** Fiat settlement and KYC are between the user and a
    regulated anchor under SEP-24 / SEP-6. We are not in the settlement path.
 3. **Stellar enforces atomicity.** The ledger, not Stellar Intel, guarantees the
@@ -4463,8 +4519,11 @@ In this model:
 
 1. **The reputation oracle** (see [`docs/ORACLE_SPEC.md`](ORACLE_SPEC.md))
    already records every terminal outcome: intent hash, anchor, quoted rate,
-   delivered rate, settle time, and outcome status. Over time, the oracle
-   accumulates a per-user remittance history that is user-signed,
+   delivered rate, settle time, and outcome status. Today, the oracle records
+   per-anchor outcomes with no user identifier (`OutcomeLogRow` stores no user key,
+   and PII is redacted per [`docs/NON_CUSTODY.md`](NON_CUSTODY.md)). A credit layer
+   would need a way to correlate or prove a user's own remittance history — whether
+   through client-side attestation or zero-knowledge proof — that is user-signed,
    replayable, and permissionless to read.
 2. **The intent primitive** (see [`docs/INTENT_API.md`](INTENT_API.md))
    already expresses a user's commitment to a future action. A credit-layer
@@ -4520,9 +4579,10 @@ the outcome log ([`types/reputation.ts`](../types/reputation.ts)):
 
 **Open questions for the proposed criteria:**
 
-1. Should synthetic probe transactions (nightly $1 off-ramps — see Wave 2.3
-   in [`docs/ROADMAP.md`](ROADMAP.md)) count toward proven history? Probes
-   are user-witnessed but may not reflect genuine remittance behaviour.
+1. Should synthetic probe transactions (nightly $1 off-ramps — see Rung 1
+   in [`docs/ROADMAP.md`](ROADMAP.md#rung-1--data-infra)) count toward proven
+   history? Probes are user-witnessed but may not reflect genuine remittance
+   behaviour.
 2. Does a single corridor user have a materially different risk profile from
    a multi-corridor user?
 3. Should the threshold adjust for the destination country's remittance
@@ -4783,7 +4843,7 @@ host enforces the threshold.
 
 ### Prerequisites
 
-- Rust toolchain + `cargo` with the `soroban` CLI installed.
+- Rust toolchain + `cargo` with the `stellar` CLI installed.
 - Stellar account with sufficient XLM for transaction fees.
 - Authorization from the current admin (private key access).
 
@@ -4895,10 +4955,12 @@ removed urgently:
 
 ## Contract upgrade governance
 
-The contract upgrade authority (`init_upgrade` / `upgrade` entrypoints in
-`src/upgrade.rs`) uses a separate `UpgradeAdmin` key. The same multisig
-migration path applies: set `UpgradeAdmin` to the multisig account using the
-same propose/accept flow as for the main admin:
+The contract upgrade authority (bound at deploy by
+`__constructor(admin, upgrade_admin)`; `upgrade` in
+`contracts/reputation/src/upgrade.rs`) uses a separate `UpgradeAdmin` key. The
+same multisig migration path applies: rotate `UpgradeAdmin` to the multisig
+account using `propose_upgrade_admin`, `accept_upgrade_admin`, and
+`cancel_upgrade_proposal`:
 
 ```bash
 stellar contract invoke \
@@ -5065,7 +5127,7 @@ systems are outside Stellar Intel's control and therefore outside its threat mod
 
 ## 11. Changes
 
-These terms may change. Material changes will be reflected in the "Last updated"
+These terms may change. Material changes will be reflected in the "Last reviewed"
 date. Continued use after a change constitutes acceptance.
 
 ---
@@ -5076,14 +5138,15 @@ The user-facing summary rendered in the product (issue #739). It must remain
 consistent with the sections above; if one changes, change both.
 
 > Stellar Intel is non-custodial. You sign every transaction with your own wallet.
-> Rates are live quotes, not guarantees.
+> Most rates are indicative estimates, not guaranteed quotes.
 
 Kept to three sentences deliberately — it appears in a banner, and a disclaimer
 too long to read is not a disclaimer. Each sentence maps to a section above:
 non-custody (§2), user-signed (§2), rates are estimates (§3).
 
-`components/offramp/DisclaimerBanner.tsx` renders this text and links here, so
-this document is the single source for the wording.
+`components/offramp/DisclaimerBanner.tsx` renders `DISCLAIMER_TEXT` from
+`lib/legal.ts`, which mirrors this block, and links here, so this document is
+the single source for the wording.
 
 ---
 

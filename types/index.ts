@@ -21,6 +21,22 @@ export interface Anchor {
   serviceDomain?: string;
   /** Known SEP protocol support flags for this anchor. */
   seps?: Array<'sep6' | 'sep10' | 'sep24' | 'sep31' | 'sep38'>;
+  /**
+   * subset of corridors whose payout currency has not been confirmed on any live /info response;
+   * still routable, but flagged to users.
+   */
+  unverifiedCorridors?: string[];
+  /**
+   * corridors this anchor serves ONLY as a SEP-31 receiving anchor.
+   * Tracked for the record, never routed (SEP-31 needs a bilateral sending-anchor agreement).
+   * Must NOT also appear in corridors.
+   */
+  sep31Corridors?: string[];
+  /**
+   * false when the anchor's own /info deposit map is empty/disabled for its asset;
+   * default (undefined) means enabled.
+   */
+  depositEnabled?: boolean;
   /** Structured operator-supplied metadata, as collected by the anchor onboarding template. */
   metadata?: AnchorMetadata;
 }
@@ -44,7 +60,11 @@ export interface AnchorMetadata {
 /** A payment corridor from one asset to a fiat currency in a given country. */
 export interface Corridor {
   id: string; // e.g. 'usdc-ngn'
-  from: string; // asset code, e.g. 'USDC'
+  from: string; // on-chain asset code, e.g. 'USDC', 'ARST', 'NGNT'
+  /** Issuer G-address of the on-chain asset sold on this corridor; `null` only for native XLM. */
+  fromIssuer: string | null;
+  /** ISO 4217 code of the currency the on-chain asset is pegged to (`'USD'` for USDC, `'BRL'` for the nTokens BRL token). */
+  fromPeg: string;
   to: string; // fiat currency code, e.g. 'NGN'
   countryCode: string; // ISO 3166-1 alpha-2
   countryName: string;
