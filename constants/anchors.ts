@@ -219,7 +219,7 @@ export const CORRIDORS: Corridor[] = [
   {
     id: 'brl-brl',
     from: 'BRL',
-    fromIssuer: 'GDVKY2GU2DRXWTBEYJJWSFXIGBZV6AZNBVVSUHEPZI54LIS6BA7DVVSP',
+    fromIssuer: BRL_ISSUER,
     fromPeg: 'BRL',
     to: 'BRL',
     countryCode: 'BR',
